@@ -1,46 +1,11 @@
 #pragma once
 
-#include "mathlang/lexer.hpp"
+#include "mathlang/ast.hpp"
 
-#include <memory>
-#include <string>
+#include <cstddef>
 #include <vector>
 
 namespace mathlang {
-
-struct Expression {
-    virtual ~Expression() = default;
-};
-
-using ExpressionPtr = std::unique_ptr<Expression>;
-
-struct NumberExpression : Expression {
-    std::string value;
-};
-
-struct IdentifierExpression : Expression {
-    std::string name;
-};
-
-struct UnaryExpression : Expression {
-    TokenType op;
-    ExpressionPtr operand;
-};
-
-struct BinaryExpression : Expression {
-    TokenType op;
-    ExpressionPtr left;
-    ExpressionPtr right;
-};
-
-struct CallExpression : Expression {
-    std::string function;
-    std::vector<ExpressionPtr> arguments;
-};
-
-struct FactorialExpression : Expression {
-    ExpressionPtr operand;
-};
 
 class Parser {
 public:
