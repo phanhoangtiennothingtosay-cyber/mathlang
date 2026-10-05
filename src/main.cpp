@@ -31,10 +31,10 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    const std::string source(
+    const std::string source{
         std::istreambuf_iterator<char>(file),
         std::istreambuf_iterator<char>()
-    );
+    };
 
     mathlang::Lexer lexer(source);
     const auto tokens = lexer.tokenize();
@@ -55,6 +55,7 @@ int main(int argc, char* argv[]) {
         auto expression = parser.parse();
 
         mathlang::SemanticAnalyzer semantic;
+
         const auto semantic_result =
             semantic.analyze(*expression);
 
@@ -68,6 +69,7 @@ int main(int argc, char* argv[]) {
         }
 
         mathlang::Runtime runtime;
+
         const auto result =
             runtime.evaluate(*expression);
 
@@ -82,9 +84,7 @@ int main(int argc, char* argv[]) {
 
         switch (result.value.type) {
         case mathlang::RuntimeValue::Type::Number:
-            std::cout
-                << result.value.number
-                << '\n';
+            std::cout << result.value.number << '\n';
             break;
 
         case mathlang::RuntimeValue::Type::Boolean:
