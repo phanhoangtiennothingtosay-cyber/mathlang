@@ -11,6 +11,12 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_executable(mathlang
     src/main.cpp
+    src/lexer.cpp
+    src/parser.cpp
+    src/ast.cpp
+    src/semantic.cpp
+    src/math.cpp
+    src/runtime.cpp
 )
 
 target_include_directories(mathlang
