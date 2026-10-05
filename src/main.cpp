@@ -2,6 +2,7 @@
 #include "mathlang/parser.hpp"
 #include "mathlang/runtime.hpp"
 #include "mathlang/semantic.hpp"
+#include "mathlang/variables.hpp"
 
 #include <fstream>
 #include <iostream>
@@ -53,6 +54,8 @@ int main(int argc, char* argv[]) {
     try {
         mathlang::Parser parser(tokens);
         auto expression = parser.parse();
+
+        mathlang::Variables variables;
 
         mathlang::SemanticAnalyzer semantic;
 
