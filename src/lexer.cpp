@@ -64,7 +64,6 @@ Token Lexer::invalid_token() {
 
 Token Lexer::read_number() {
     const std::size_t start = position_;
-    bool has_dot = false;
 
     while (std::isdigit(
         static_cast<unsigned char>(current())
@@ -73,7 +72,6 @@ Token Lexer::read_number() {
     }
 
     if (current() == '.') {
-        has_dot = true;
         advance();
 
         while (std::isdigit(
@@ -83,23 +81,22 @@ Token Lexer::read_number() {
         }
     }
 
-    if (has_dot || start != position_) {
-        return make_token(
-            TokenType::Number,
-            start,
-            position_
-        );
-    }
-
-    return invalid_token();
+    return make_token(
+        TokenType::Number,
+        start,
+        position_
+    );
 }
 
 Token Lexer::read_identifier() {
     const std::size_t start = position_;
 
-    while (std::isalnum(
-        static_cast<unsigned char>(current())
-    ) || current() == '_') {
+    while (
+        std::isalnum(
+            static_cast<unsigned char>(current())
+        ) ||
+        current() == '_'
+    ) {
         advance();
     }
 
@@ -130,142 +127,220 @@ std::vector<Token> Lexer::tokenize() {
             continue;
         }
 
-        if (std::isalpha(
-            static_cast<unsigned char>(c)
-        ) || c == '_') {
+        if (
+            std::isalpha(
+                static_cast<unsigned char>(c)
+            ) ||
+            c == '_'
+        ) {
             tokens.push_back(read_identifier());
             continue;
         }
 
-        if (c == 'π') {
-            advance();
+        if (source_.substr(position_, 2) == "\xCF\x80") {
+            position_ += 2;
+
             tokens.push_back(
-                make_token(TokenType::Identifier, start, position_)
+                make_token(
+                    TokenType::Identifier,
+                    start,
+                    position_
+                )
             );
+
+            continue;
+        }
+
+        if (source_.substr(position_, 2) == "\xC3\x97") {
+            position_ += 2;
+
+            tokens.push_back(
+                make_token(
+                    TokenType::Multiply,
+                    start,
+                    position_
+                )
+            );
+
+            continue;
+        }
+
+        if (source_.substr(position_, 2) == "\xC3\xB7") {
+            position_ += 2;
+
+            tokens.push_back(
+                make_token(
+                    TokenType::Divide,
+                    start,
+                    position_
+                )
+            );
+
+            continue;
+        }
+
+        if (source_.substr(position_, 3) == "\xE2\x89\xA0") {
+            position_ += 3;
+
+            tokens.push_back(
+                make_token(
+                    TokenType::NotEqual,
+                    start,
+                    position_
+                )
+            );
+
+            continue;
+        }
+
+        if (source_.substr(position_, 3) == "\xE2\x89\xA4") {
+            position_ += 3;
+
+            tokens.push_back(
+                make_token(
+                    TokenType::LessEqual,
+                    start,
+                    position_
+                )
+            );
+
+            continue;
+        }
+
+        if (source_.substr(position_, 3) == "\xE2\x89\xA5") {
+            position_ += 3;
+
+            tokens.push_back(
+                make_token(
+                    TokenType::GreaterEqual,
+                    start,
+                    position_
+                )
+            );
+
             continue;
         }
 
         switch (c) {
         case '+':
             advance();
-            tokens.push_back(make_token(TokenType::Plus, start, position_));
+            tokens.push_back(
+                make_token(TokenType::Plus, start, position_)
+            );
             break;
 
         case '-':
             advance();
-            tokens.push_back(make_token(TokenType::Minus, start, position_));
-            break;
-
-        case '×':
-            advance();
-            tokens.push_back(make_token(TokenType::Multiply, start, position_));
+            tokens.push_back(
+                make_token(TokenType::Minus, start, position_)
+            );
             break;
 
         case '*':
             advance();
-            tokens.push_back(make_token(TokenType::Multiply, start, position_));
-            break;
-
-        case '÷':
-            advance();
-            tokens.push_back(make_token(TokenType::Divide, start, position_));
+            tokens.push_back(
+                make_token(TokenType::Multiply, start, position_)
+            );
             break;
 
         case '/':
             advance();
-            tokens.push_back(make_token(TokenType::Divide, start, position_));
+            tokens.push_back(
+                make_token(TokenType::Divide, start, position_)
+            );
             break;
 
         case '%':
             advance();
-            tokens.push_back(make_token(TokenType::Modulo, start, position_));
+            tokens.push_back(
+                make_token(TokenType::Modulo, start, position_)
+            );
             break;
 
         case '!':
             advance();
-            tokens.push_back(make_token(TokenType::Factorial, start, position_));
+            tokens.push_back(
+                make_token(TokenType::Factorial, start, position_)
+            );
             break;
 
         case '=':
             advance();
-            tokens.push_back(make_token(TokenType::Equal, start, position_));
-            break;
-
-        case '≠':
-            advance();
-            tokens.push_back(make_token(TokenType::NotEqual, start, position_));
+            tokens.push_back(
+                make_token(TokenType::Equal, start, position_)
+            );
             break;
 
         case '<':
             advance();
 
-            if (current() == '=') {
-                advance();
-                tokens.push_back(
-                    make_token(TokenType::LessEqual, start, position_)
-                );
-            } else {
-                tokens.push_back(
-                    make_token(TokenType::Less, start, position_)
-                );
-            }
-
+            tokens.push_back(
+                make_token(TokenType::Less, start, position_)
+            );
             break;
 
         case '>':
             advance();
 
-            if (current() == '=') {
-                advance();
-                tokens.push_back(
-                    make_token(TokenType::GreaterEqual, start, position_)
-                );
-            } else {
-                tokens.push_back(
-                    make_token(TokenType::Greater, start, position_)
-                );
-            }
-
+            tokens.push_back(
+                make_token(TokenType::Greater, start, position_)
+            );
             break;
 
         case '(':
             advance();
-            tokens.push_back(make_token(TokenType::LeftParen, start, position_));
+            tokens.push_back(
+                make_token(TokenType::LeftParen, start, position_)
+            );
             break;
 
         case ')':
             advance();
-            tokens.push_back(make_token(TokenType::RightParen, start, position_));
+            tokens.push_back(
+                make_token(TokenType::RightParen, start, position_)
+            );
             break;
 
         case '[':
             advance();
-            tokens.push_back(make_token(TokenType::LeftBracket, start, position_));
+            tokens.push_back(
+                make_token(TokenType::LeftBracket, start, position_)
+            );
             break;
 
         case ']':
             advance();
-            tokens.push_back(make_token(TokenType::RightBracket, start, position_));
+            tokens.push_back(
+                make_token(TokenType::RightBracket, start, position_)
+            );
             break;
 
         case '{':
             advance();
-            tokens.push_back(make_token(TokenType::LeftBrace, start, position_));
+            tokens.push_back(
+                make_token(TokenType::LeftBrace, start, position_)
+            );
             break;
 
         case '}':
             advance();
-            tokens.push_back(make_token(TokenType::RightBrace, start, position_));
+            tokens.push_back(
+                make_token(TokenType::RightBrace, start, position_)
+            );
             break;
 
         case ';':
             advance();
-            tokens.push_back(make_token(TokenType::Semicolon, start, position_));
+            tokens.push_back(
+                make_token(TokenType::Semicolon, start, position_)
+            );
             break;
 
         case ',':
             advance();
-            tokens.push_back(make_token(TokenType::Comma, start, position_));
+            tokens.push_back(
+                make_token(TokenType::Comma, start, position_)
+            );
             break;
 
         default:
