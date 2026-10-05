@@ -1,78 +1,14 @@
+#include "mathlang/lexer.hpp"
+#include "mathlang/parser.hpp"
+#include "mathlang/runtime.hpp"
+#include "mathlang/semantic.hpp"
+
 #include <fstream>
 #include <iostream>
+#include <iterator>
 #include <string>
-#include <string_view>
-
-namespace mathlang {
-
-enum class SourceCheck {
-    Valid,
-    WrongLanguage
-};
-
-bool has_mth_extension(std::string_view path) {
-    constexpr std::string_view ext = ".mth";
-
-    if (path.size() < ext.size()) {
-        return false;
-    }
-
-    return path.substr(path.size() - ext.size()) == ext;
-}
-
-SourceCheck syntax_guard(std::string_view source) {
-    constexpr std::string_view foreign_markers[] = {
-        "#include",
-        "std::",
-        "int main(",
-        "using namespace",
-        "public static void",
-        "System.out.",
-        "console.log(",
-        "def ",
-        "import ",
-        "package "
-    };
-
-    for (const auto marker : foreign_markers) {
-        if (source.find(marker) != std::string_view::npos) {
-            return SourceCheck::WrongLanguage;
-        }
-    }
-
-    return SourceCheck::Valid;
-}
-
-bool read_source(const char* path, std::string& source) {
-    std::ifstream file(path, std::ios::binary);
-
-    if (!file) {
-        return false;
-    }
-
-    file.seekg(0, std::ios::end);
-    const auto size = file.tellg();
-
-    if (size < 0) {
-        return false;
-    }
-
-    source.reserve(static_cast<std::size_t>(size));
-    file.seekg(0, std::ios::beg);
-
-    source.assign(
-        std::istreambuf_iterator<char>(file),
-        std::istreambuf_iterator<char>()
-    );
-
-    return true;
-}
-
-} // namespace mathlang
 
 int main(int argc, char* argv[]) {
-    using namespace mathlang;
-
     if (argc < 2) {
         std::cerr << "Usage: mathlang <file.mth>\n";
         return 1;
@@ -80,24 +16,93 @@ int main(int argc, char* argv[]) {
 
     const std::string path = argv[1];
 
-    if (!has_mth_extension(path)) {
+    if (
+        path.size() < 4 ||
+        path.substr(path.size() - 4) != ".mth"
+    ) {
         std::cerr << "Error: expected a .mth source file.\n";
         return 1;
     }
 
-    std::string source;
+    std::ifstream file(path, std::ios::binary);
 
-    if (!read_source(path.c_str(), source)) {
+    if (!file) {
         std::cerr << "Error: cannot read source file.\n";
         return 1;
     }
 
-    if (syntax_guard(source) == SourceCheck::WrongLanguage) {
-        std::cerr << "Hey, wrong programming language.\n";
-        return 1;
+    const std::string source(
+        std::istreambuf_iterator<char>(file),
+        std::istreambuf_iterator<char>()
+    );
+
+    mathlang::Lexer lexer(source);
+    const auto tokens = lexer.tokenize();
+
+    for (const auto& token : tokens) {
+        if (token.type == mathlang::TokenType::Invalid) {
+            std::cerr
+                << "Syntax Error at position "
+                << token.position
+                << '\n';
+
+            return 1;
+        }
     }
 
-    std::cout << "mathlang: source accepted.\n";
+    try {
+        mathlang::Parser parser(tokens);
+        auto expression = parser.parse();
+
+        mathlang::SemanticAnalyzer semantic;
+        const auto semantic_result =
+            semantic.analyze(*expression);
+
+        if (!semantic_result.valid) {
+            std::cerr
+                << "Semantic Error: "
+                << semantic_result.error
+                << '\n';
+
+            return 1;
+        }
+
+        mathlang::Runtime runtime;
+        const auto result =
+            runtime.evaluate(*expression);
+
+        if (!result.valid) {
+            std::cerr
+                << "Runtime Error: "
+                << result.error
+                << '\n';
+
+            return 1;
+        }
+
+        switch (result.value.type) {
+        case mathlang::RuntimeValue::Type::Number:
+            std::cout
+                << result.value.number
+                << '\n';
+            break;
+
+        case mathlang::RuntimeValue::Type::Boolean:
+            std::cout
+                << (result.value.boolean ? "true" : "false")
+                << '\n';
+            break;
+
+        case mathlang::RuntimeValue::Type::Undefined:
+            std::cerr
+                << "Runtime Error: undefined value.\n";
+            return 1;
+        }
+
+    } catch (const std::exception& error) {
+        std::cerr << error.what() << '\n';
+        return 1;
+    }
 
     return 0;
 }
