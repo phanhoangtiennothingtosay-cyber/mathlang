@@ -1,41 +1,256 @@
-#pragma once
+#include "mathlang/parser.hpp"
 
-#include "mathlang/ast.hpp"
-
-#include <cstddef>
-#include <vector>
+#include <stdexcept>
+#include <utility>
 
 namespace mathlang {
 
-class Parser {
-public:
-    explicit Parser(const std::vector<Token>& tokens);
+Parser::Parser(const std::vector<Token>& tokens)
+    : tokens_(tokens) {}
 
-    ExpressionPtr parse();
+const Token& Parser::current() const {
+    return tokens_[position_];
+}
 
-private:
-    const std::vector<Token>& tokens_;
-    std::size_t position_ = 0;
+const Token& Parser::peek(std::size_t offset) const {
+    const std::size_t index = position_ + offset;
 
-    const Token& current() const;
-    const Token& peek(std::size_t offset = 1) const;
+    if (index >= tokens_.size()) {
+        return tokens_.back();
+    }
 
-    bool match(TokenType type);
-    bool check(TokenType type) const;
-    const Token& consume(TokenType type);
+    return tokens_[index];
+}
 
-    ExpressionPtr parse_expression();
-    ExpressionPtr parse_comparison();
-    ExpressionPtr parse_additive();
-    ExpressionPtr parse_multiplicative();
-    ExpressionPtr parse_unary();
-    ExpressionPtr parse_postfix();
-    ExpressionPtr parse_primary();
+bool Parser::check(TokenType type) const {
+    return current().type == type;
+}
 
-    bool starts_implicit_multiplication() const;
+bool Parser::match(TokenType type) {
+    if (!check(type)) {
+        return false;
+    }
 
-    ExpressionPtr make_number(const Token& token);
-    ExpressionPtr make_identifier(const Token& token);
-};
+    ++position_;
+    return true;
+}
+
+const Token& Parser::consume(TokenType type) {
+    if (!check(type)) {
+        throw std::runtime_error(
+            "Syntax Error at position " +
+            std::to_string(current().position)
+        );
+    }
+
+    const Token& token = current();
+    ++position_;
+    return token;
+}
+
+ExpressionPtr Parser::parse() {
+    auto expression = parse_expression();
+
+    if (!check(TokenType::EndOfFile)) {
+        throw std::runtime_error(
+            "Syntax Error at position " +
+            std::to_string(current().position)
+        );
+    }
+
+    return expression;
+}
+
+ExpressionPtr Parser::parse_expression() {
+    return parse_comparison();
+}
+
+ExpressionPtr Parser::parse_comparison() {
+    auto expression = parse_additive();
+
+    while (
+        check(TokenType::Equal) ||
+        check(TokenType::NotEqual) ||
+        check(TokenType::Less) ||
+        check(TokenType::Greater) ||
+        check(TokenType::LessEqual) ||
+        check(TokenType::GreaterEqual)
+    ) {
+        const TokenType op = current().type;
+        ++position_;
+
+        auto right = parse_additive();
+
+        auto node = std::make_unique<BinaryExpression>();
+        node->op = op;
+        node->left = std::move(expression);
+        node->right = std::move(right);
+
+        expression = std::move(node);
+    }
+
+    return expression;
+}
+
+ExpressionPtr Parser::parse_additive() {
+    auto expression = parse_multiplicative();
+
+    while (
+        check(TokenType::Plus) ||
+        check(TokenType::Minus)
+    ) {
+        const TokenType op = current().type;
+        ++position_;
+
+        auto right = parse_multiplicative();
+
+        auto node = std::make_unique<BinaryExpression>();
+        node->op = op;
+        node->left = std::move(expression);
+        node->right = std::move(right);
+
+        expression = std::move(node);
+    }
+
+    return expression;
+}
+
+ExpressionPtr Parser::parse_multiplicative() {
+    auto expression = parse_unary();
+
+    while (true) {
+        if (
+            check(TokenType::Multiply) ||
+            check(TokenType::Divide) ||
+            check(TokenType::Modulo)
+        ) {
+            const TokenType op = current().type;
+            ++position_;
+
+            auto right = parse_unary();
+
+            auto node = std::make_unique<BinaryExpression>();
+            node->op = op;
+            node->left = std::move(expression);
+            node->right = std::move(right);
+
+            expression = std::move(node);
+            continue;
+        }
+
+        if (starts_implicit_multiplication()) {
+            auto right = parse_unary();
+
+            auto node = std::make_unique<BinaryExpression>();
+            node->op = TokenType::Multiply;
+            node->left = std::move(expression);
+            node->right = std::move(right);
+
+            expression = std::move(node);
+            continue;
+        }
+
+        break;
+    }
+
+    return expression;
+}
+
+ExpressionPtr Parser::parse_unary() {
+    if (
+        check(TokenType::Plus) ||
+        check(TokenType::Minus)
+    ) {
+        const TokenType op = current().type;
+        ++position_;
+
+        auto node = std::make_unique<UnaryExpression>();
+        node->op = op;
+        node->operand = parse_unary();
+
+        return node;
+    }
+
+    return parse_postfix();
+}
+
+ExpressionPtr Parser::parse_postfix() {
+    auto expression = parse_primary();
+
+    while (match(TokenType::Factorial)) {
+        auto node = std::make_unique<FactorialExpression>();
+        node->operand = std::move(expression);
+        expression = std::move(node);
+    }
+
+    return expression;
+}
+
+ExpressionPtr Parser::parse_primary() {
+    if (check(TokenType::Number)) {
+        const Token token = current();
+        ++position_;
+
+        return make_number(token);
+    }
+
+    if (check(TokenType::Identifier)) {
+        const Token token = current();
+        ++position_;
+
+        if (match(TokenType::LeftParen)) {
+            auto call = std::make_unique<CallExpression>();
+            call->function = token.text;
+
+            if (!check(TokenType::RightParen)) {
+                do {
+                    call->arguments.push_back(
+                        parse_expression()
+                    );
+                } while (match(TokenType::Comma));
+            }
+
+            consume(TokenType::RightParen);
+
+            return call;
+        }
+
+        return make_identifier(token);
+    }
+
+    if (match(TokenType::LeftParen)) {
+        auto expression = parse_expression();
+
+        consume(TokenType::RightParen);
+
+        return expression;
+    }
+
+    throw std::runtime_error(
+        "Syntax Error at position " +
+        std::to_string(current().position)
+    );
+}
+
+bool Parser::starts_implicit_multiplication() const {
+    return
+        check(TokenType::Number) ||
+        check(TokenType::Identifier) ||
+        check(TokenType::LeftParen);
+}
+
+ExpressionPtr Parser::make_number(const Token& token) {
+    auto node = std::make_unique<NumberExpression>();
+    node->value = token.text;
+
+    return node;
+}
+
+ExpressionPtr Parser::make_identifier(const Token& token) {
+    auto node = std::make_unique<IdentifierExpression>();
+    node->name = token.text;
+
+    return node;
+}
 
 } // namespace mathlang
