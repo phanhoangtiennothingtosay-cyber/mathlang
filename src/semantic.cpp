@@ -1,6 +1,6 @@
 #include "mathlang/semantic.hpp"
 
-#include <typeinfo>
+#include <string>
 #include <utility>
 
 namespace mathlang {
@@ -82,59 +82,40 @@ SemanticResult SemanticAnalyzer::analyze_unary(
 SemanticResult SemanticAnalyzer::analyze_binary(
     const BinaryExpression& expression
 ) const {
-    const auto left =
-        analyze_expression(*expression.left);
+    const auto left = analyze_expression(*expression.left);
+    if (!left.valid) return left;
 
-    if (!left.valid) {
-        return left;
-    }
+    const auto right = analyze_expression(*expression.right);
+    if (!right.valid) return right;
 
-    const auto right =
-        analyze_expression(*expression.right);
+    const std::string& op = expression.op;
+    const bool comparison = op == "=" || op == "==" || op == "!=" ||
+        op == "≠" || op == "<" || op == ">" || op == "<=" ||
+        op == ">=" || op == "≤" || op == "≥";
 
-    if (!right.valid) {
-        return right;
-    }
-
-    switch (expression.op) {
-    case TokenType::Equal:
-    case TokenType::NotEqual:
-    case TokenType::Less:
-    case TokenType::Greater:
-    case TokenType::LessEqual:
-    case TokenType::GreaterEqual:
+    if (comparison) {
+        if ((left.type != ValueType::Number && left.type != ValueType::Unknown) ||
+            (right.type != ValueType::Number && right.type != ValueType::Unknown)) {
+            return error("Comparison operators require numeric operands.");
+        }
         return valid(ValueType::Boolean);
-
-    case TokenType::Plus:
-    case TokenType::Minus:
-    case TokenType::Multiply:
-    case TokenType::Divide:
-    case TokenType::Modulo:
-        if (left.type != ValueType::Number &&
-            left.type != ValueType::Unknown) {
-            return error(
-                "Left operand must be numeric."
-            );
-        }
-
-        if (right.type != ValueType::Number &&
-            right.type != ValueType::Unknown) {
-            return error(
-                "Right operand must be numeric."
-            );
-        }
-
-        return valid(ValueType::Number);
-
-    default:
-        return error("Unsupported binary operator.");
     }
+
+    const bool arithmetic = op == "+" || op == "-" || op == "*" ||
+        op == "×" || op == "/" || op == "÷" || op == "%";
+    if (!arithmetic) return error("Unsupported binary operator: " + op);
+
+    if (left.type != ValueType::Number && left.type != ValueType::Unknown)
+        return error("Left operand must be numeric.");
+    if (right.type != ValueType::Number && right.type != ValueType::Unknown)
+        return error("Right operand must be numeric.");
+    return valid(ValueType::Number);
 }
 
 SemanticResult SemanticAnalyzer::analyze_call(
     const CallExpression& expression
 ) const {
-    if (expression.function.empty()) {
+    if (expression.callee.empty()) {
         return error("Function name cannot be empty.");
     }
 
