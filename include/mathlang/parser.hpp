@@ -1,8 +1,12 @@
+
 #pragma once
 
 #include "mathlang/ast.hpp"
+#include "mathlang/lexer.hpp"
 
 #include <cstddef>
+#include <memory>
+#include <string>
 #include <vector>
 
 namespace mathlang {
@@ -11,31 +15,38 @@ class Parser {
 public:
     explicit Parser(const std::vector<Token>& tokens);
 
-    ExpressionPtr parse();
+    std::unique_ptr<Program> parse_program();
+    std::unique_ptr<Expression> parse();
 
 private:
-    const std::vector<Token>& tokens_;
-    std::size_t position_ = 0;
+    const Token& peek() const;
+    const Token& previous() const;
+    const Token& advance();
 
-    const Token& current() const;
-    const Token& peek(std::size_t offset = 1) const;
-
-    bool match(TokenType type);
     bool check(TokenType type) const;
-    const Token& consume(TokenType type);
+    bool match(TokenType type);
+    bool at_end() const;
 
-    ExpressionPtr parse_expression();
-    ExpressionPtr parse_comparison();
-    ExpressionPtr parse_additive();
-    ExpressionPtr parse_multiplicative();
-    ExpressionPtr parse_unary();
-    ExpressionPtr parse_postfix();
-    ExpressionPtr parse_primary();
+    void skip_separators();
 
-    bool starts_implicit_multiplication() const;
+    std::unique_ptr<Statement> parse_statement();
+    std::unique_ptr<Statement> parse_assignment_or_expression_statement();
 
-    ExpressionPtr make_number(const Token& token);
-    ExpressionPtr make_identifier(const Token& token);
+    std::unique_ptr<Expression> parse_expression();
+    std::unique_ptr<Expression> parse_comparison();
+    std::unique_ptr<Expression> parse_additive();
+    std::unique_ptr<Expression> parse_multiplicative();
+    std::unique_ptr<Expression> parse_unary();
+    std::unique_ptr<Expression> parse_postfix();
+    std::unique_ptr<Expression> parse_primary();
+
+    [[noreturn]] void error(
+        const Token& token,
+        const std::string& message
+    ) const;
+
+    const std::vector<Token>& tokens_;
+    std::size_t current_ = 0;
 };
 
 } // namespace mathlang
