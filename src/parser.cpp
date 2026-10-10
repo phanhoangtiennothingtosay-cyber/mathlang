@@ -1,4 +1,3 @@
-
 #include "mathlang/parser.hpp"
 
 #include <stdexcept>
@@ -9,10 +8,14 @@ namespace mathlang {
 Parser::Parser(const std::vector<Token>& tokens) : tokens_(tokens) {}
 
 const Token& Parser::peek() const {
+    static const Token emptyToken{TokenType::EndOfFile, "", 0};
+    if (tokens_.empty()) return emptyToken;
     return tokens_[current_ < tokens_.size() ? current_ : tokens_.size() - 1];
 }
 
 const Token& Parser::previous() const {
+    static const Token emptyToken{TokenType::EndOfFile, "", 0};
+    if (tokens_.empty()) return emptyToken;
     return tokens_[current_ > 0 ? current_ - 1 : 0];
 }
 
@@ -32,8 +35,8 @@ bool Parser::match(TokenType type) {
 }
 
 bool Parser::at_end() const {
-    return current_ >= tokens_.size() ||
-           tokens_[current_].type == TokenType::End;
+    return tokens_.empty() || current_ >= tokens_.size() ||
+           tokens_[current_].type == TokenType::EndOfFile;
 }
 
 void Parser::skip_separators() {
@@ -55,47 +58,42 @@ std::unique_ptr<Program> Parser::parse_program() {
             error(peek(), "Expected ';' between statements.");
         skip_separators();
     }
-
     return program;
 }
 
 std::unique_ptr<Statement> Parser::parse_statement() {
-    if (check(TokenType::Identifier) && peek().lexeme == "print") {
+    if (check(TokenType::Identifier) && peek().text == "print" &&
+        current_ + 1 < tokens_.size() &&
+        tokens_[current_ + 1].type == TokenType::LeftParen) {
         advance();
-        if (!match(TokenType::LeftParen))
-            error(peek(), "Expected '(' after print.");
-
+        advance();
         auto value = parse_expression();
         if (!match(TokenType::RightParen))
             error(peek(), "Expected ')' after print argument.");
-
         return std::make_unique<PrintStatement>(std::move(value));
     }
-
     return parse_assignment_or_expression_statement();
 }
 
 std::unique_ptr<Statement> Parser::parse_assignment_or_expression_statement() {
-    const std::size_t start = current_;
-    auto left = parse_expression();
-
-    if (match(TokenType::Equal)) {
-        if (auto* target = dynamic_cast<IdentifierExpression*>(left.get())) {
-            std::string name = target->name;
-            auto value = parse_expression();
-            return std::make_unique<AssignmentStatement>(std::move(name), std::move(value));
-        }
-
-        if (check(TokenType::Identifier)) {
-            std::string name = advance().lexeme;
-            return std::make_unique<AssignmentStatement>(std::move(name), std::move(left));
-        }
-
-        error(previous(), "Assignment target must be an identifier.");
+    if (check(TokenType::Identifier) && current_ + 1 < tokens_.size() &&
+        tokens_[current_ + 1].type == TokenType::Equal) {
+        const std::string name = advance().text;
+        advance();
+        auto value = parse_expression();
+        return std::make_unique<AssignmentStatement>(name, std::move(value));
     }
 
-    if (current_ == start) error(peek(), "Expected an expression.");
-    return std::make_unique<ExpressionStatement>(std::move(left));
+    auto expression = parse_expression();
+    if (auto* binary = dynamic_cast<BinaryExpression*>(expression.get());
+        binary && binary->op == "=" &&
+        dynamic_cast<IdentifierExpression*>(binary->right.get())) {
+        auto* target = dynamic_cast<IdentifierExpression*>(binary->right.get());
+        const std::string name = target->name;
+        auto value = std::move(binary->left);
+        return std::make_unique<AssignmentStatement>(name, std::move(value));
+    }
+    return std::make_unique<ExpressionStatement>(std::move(expression));
 }
 
 std::unique_ptr<Expression> Parser::parse() {
@@ -110,95 +108,92 @@ std::unique_ptr<Expression> Parser::parse_expression() {
 
 std::unique_ptr<Expression> Parser::parse_comparison() {
     auto expression = parse_additive();
-
-    while (match(TokenType::Equal) || match(TokenType::NotEqual) ||
-           match(TokenType::Less) || match(TokenType::Greater) ||
-           match(TokenType::LessEqual) || match(TokenType::GreaterEqual)) {
-        const std::string op = previous().lexeme;
+    while (match(TokenType::Equal) || match(TokenType::EqualEqual) ||
+           match(TokenType::NotEqual) || match(TokenType::Less) ||
+           match(TokenType::Greater) || match(TokenType::LessEqual) ||
+           match(TokenType::GreaterEqual)) {
+        const std::string op = previous().text;
         auto right = parse_additive();
-        expression = std::make_unique<BinaryExpression>(
-            op, std::move(expression), std::move(right));
+        expression = std::make_unique<BinaryExpression>(op, std::move(expression), std::move(right));
     }
-
     return expression;
 }
 
 std::unique_ptr<Expression> Parser::parse_additive() {
     auto expression = parse_multiplicative();
-
     while (match(TokenType::Plus) || match(TokenType::Minus)) {
-        const std::string op = previous().lexeme;
+        const std::string op = previous().text;
         auto right = parse_multiplicative();
-        expression = std::make_unique<BinaryExpression>(
-            op, std::move(expression), std::move(right));
+        expression = std::make_unique<BinaryExpression>(op, std::move(expression), std::move(right));
     }
-
     return expression;
 }
 
 std::unique_ptr<Expression> Parser::parse_multiplicative() {
     auto expression = parse_unary();
+    while (true) {
+        if (match(TokenType::Multiply) || match(TokenType::Divide) || match(TokenType::Modulo)) {
+            const std::string op = previous().text;
+            auto right = parse_unary();
+            expression = std::make_unique<BinaryExpression>(op, std::move(expression), std::move(right));
+            continue;
+        }
 
-    while (match(TokenType::Star) || match(TokenType::Slash) ||
-           match(TokenType::Percent) || match(TokenType::Multiply) ||
-           match(TokenType::Divide)) {
-        const std::string op = previous().lexeme;
-        auto right = parse_unary();
-        expression = std::make_unique<BinaryExpression>(
-            op, std::move(expression), std::move(right));
+        const bool adjacent = previous().position + previous().text.size() == peek().position;
+        const bool implicitMultiplication = check(TokenType::Identifier) ||
+            check(TokenType::LeftParen) || (check(TokenType::Number) && adjacent);
+        if (implicitMultiplication) {
+            auto right = parse_unary();
+            expression = std::make_unique<BinaryExpression>("*", std::move(expression), std::move(right));
+            continue;
+        }
+        break;
     }
-
     return expression;
 }
 
 std::unique_ptr<Expression> Parser::parse_unary() {
     if (match(TokenType::Plus) || match(TokenType::Minus)) {
-        const std::string op = previous().lexeme;
+        const std::string op = previous().text;
         return std::make_unique<UnaryExpression>(op, parse_unary());
     }
-
     return parse_postfix();
 }
 
 std::unique_ptr<Expression> Parser::parse_postfix() {
     auto expression = parse_primary();
-
-    while (match(TokenType::Factorial)) {
+    while (match(TokenType::Factorial))
         expression = std::make_unique<FactorialExpression>(std::move(expression));
-    }
-
     return expression;
 }
 
 std::unique_ptr<Expression> Parser::parse_primary() {
     if (match(TokenType::Number)) {
-        const double value = std::stod(previous().lexeme);
-        return std::make_unique<NumberExpression>(value);
+        try {
+            return std::make_unique<NumberExpression>(std::stod(previous().text));
+        } catch (...) {
+            error(previous(), "Invalid numeric literal.");
+        }
     }
 
     if (match(TokenType::Identifier)) {
-        const std::string name = previous().lexeme;
-
+        const std::string name = previous().text;
         if (!match(TokenType::LeftParen))
             return std::make_unique<IdentifierExpression>(name);
 
         std::vector<std::unique_ptr<Expression>> arguments;
         if (!check(TokenType::RightParen)) {
-            do {
-                arguments.push_back(parse_expression());
-            } while (match(TokenType::Comma));
+            do { arguments.push_back(parse_expression()); }
+            while (match(TokenType::Comma));
         }
-
         if (!match(TokenType::RightParen))
             error(peek(), "Expected ')' after function arguments.");
-
         return std::make_unique<CallExpression>(name, std::move(arguments));
     }
 
     if (match(TokenType::LeftParen)) {
         auto expression = parse_expression();
-        if (!match(TokenType::RightParen))
-            error(peek(), "Expected ')' after expression.");
+        if (!match(TokenType::RightParen)) error(peek(), "Expected ')' after expression.");
         return expression;
     }
 
