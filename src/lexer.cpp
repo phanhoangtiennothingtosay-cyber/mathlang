@@ -120,9 +120,8 @@ std::vector<Token> Lexer::tokenize() {
         const std::size_t start = position_;
         const char c = current();
 
-        if (std::isdigit(
-            static_cast<unsigned char>(c)
-        )) {
+        if (std::isdigit(static_cast<unsigned char>(c)) ||
+            (c == '.' && std::isdigit(static_cast<unsigned char>(peek())))) {
             tokens.push_back(read_number());
             continue;
         }
@@ -218,6 +217,28 @@ std::vector<Token> Lexer::tokenize() {
                 )
             );
 
+            continue;
+        }
+
+        const auto remaining = source_.substr(position_, 2);
+        if (remaining == "==") {
+            position_ += 2;
+            tokens.push_back(make_token(TokenType::EqualEqual, start, position_));
+            continue;
+        }
+        if (remaining == "!=") {
+            position_ += 2;
+            tokens.push_back(make_token(TokenType::NotEqual, start, position_));
+            continue;
+        }
+        if (remaining == "<=") {
+            position_ += 2;
+            tokens.push_back(make_token(TokenType::LessEqual, start, position_));
+            continue;
+        }
+        if (remaining == ">=") {
+            position_ += 2;
+            tokens.push_back(make_token(TokenType::GreaterEqual, start, position_));
             continue;
         }
 
