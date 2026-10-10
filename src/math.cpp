@@ -26,15 +26,21 @@ Result failure(const char* message) {
 } // namespace
 
 Result add(double a, double b) {
-    return success(a + b);
+    const double value = a + b;
+    if (!std::isfinite(value)) return failure("Addition result is not finite.");
+    return success(value);
 }
 
 Result subtract(double a, double b) {
-    return success(a - b);
+    const double value = a - b;
+    if (!std::isfinite(value)) return failure("Subtraction result is not finite.");
+    return success(value);
 }
 
 Result multiply(double a, double b) {
-    return success(a * b);
+    const double value = a * b;
+    if (!std::isfinite(value)) return failure("Multiplication result is not finite.");
+    return success(value);
 }
 
 Result divide(double a, double b) {
@@ -42,7 +48,9 @@ Result divide(double a, double b) {
         return failure("Division by zero is undefined.");
     }
 
-    return success(a / b);
+    const double value = a / b;
+    if (!std::isfinite(value)) return failure("Division result is not finite.");
+    return success(value);
 }
 
 Result modulo(double a, double b) {
@@ -50,7 +58,9 @@ Result modulo(double a, double b) {
         return failure("Modulo by zero is undefined.");
     }
 
-    return success(std::fmod(a, b));
+    const double value = std::fmod(a, b);
+    if (!std::isfinite(value)) return failure("Modulo result is not finite.");
+    return success(value);
 }
 
 Result factorial(double x) {
