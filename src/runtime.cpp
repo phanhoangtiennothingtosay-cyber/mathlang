@@ -2,6 +2,7 @@
 
 #include "mathlang/math.hpp"
 
+#include <cmath>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -20,6 +21,11 @@ RuntimeResult Runtime::evaluate_expression(
     if (const auto* node =
         dynamic_cast<const NumberExpression*>(&expression)) {
         return evaluate_number(*node);
+    }
+
+    if (const auto* node =
+        dynamic_cast<const IdentifierExpression*>(&expression)) {
+        return error("Variable '" + node->name + "' is not available in this runtime yet.");
     }
 
     if (const auto* node =
@@ -48,119 +54,57 @@ RuntimeResult Runtime::evaluate_expression(
 RuntimeResult Runtime::evaluate_number(
     const NumberExpression& expression
 ) const {
-    try {
-        return number(std::stod(expression.value));
-    } catch (...) {
-        return error("Invalid numeric value.");
-    }
+    if (!std::isfinite(expression.value)) return error("Numeric literal must be finite.");
+    return number(expression.value);
 }
 
 RuntimeResult Runtime::evaluate_unary(
     const UnaryExpression& expression
 ) const {
-    const auto operand =
-        evaluate_expression(*expression.operand);
+    const auto operand = evaluate_expression(*expression.operand);
+    if (!operand.valid) return operand;
+    if (operand.value.type != RuntimeValue::Type::Number)
+        return error("Unary operator requires a number.");
 
-    if (!operand.valid) {
-        return operand;
-    }
-
-    if (operand.value.type != RuntimeValue::Type::Number) {
-        return error(
-            "Unary operator requires a number."
-        );
-    }
-
-    switch (expression.op) {
-    case TokenType::Plus:
-        return number(operand.value.number);
-
-    case TokenType::Minus:
-        return number(-operand.value.number);
-
-    default:
-        return error("Unsupported unary operator.");
-    }
+    if (expression.op == "+") return number(operand.value.number);
+    if (expression.op == "-") return number(-operand.value.number);
+    return error("Unsupported unary operator: " + expression.op);
 }
 
 RuntimeResult Runtime::evaluate_binary(
     const BinaryExpression& expression
 ) const {
-    const auto left =
-        evaluate_expression(*expression.left);
+    const auto left = evaluate_expression(*expression.left);
+    if (!left.valid) return left;
+    const auto right = evaluate_expression(*expression.right);
+    if (!right.valid) return right;
 
-    if (!left.valid) {
-        return left;
-    }
-
-    const auto right =
-        evaluate_expression(*expression.right);
-
-    if (!right.valid) {
-        return right;
-    }
-
-    if (
-        left.value.type != RuntimeValue::Type::Number ||
-        right.value.type != RuntimeValue::Type::Number
-    ) {
-        return error(
-            "Binary arithmetic requires numeric operands."
-        );
+    if (left.value.type != RuntimeValue::Type::Number ||
+        right.value.type != RuntimeValue::Type::Number) {
+        return error("Binary operators require numeric operands.");
     }
 
     const double a = left.value.number;
     const double b = right.value.number;
+    const std::string& op = expression.op;
+
+    if (op == "=") return boolean(a == b);
+    if (op == "==") return boolean(a == b);
+    if (op == "!=" || op == "≠") return boolean(a != b);
+    if (op == "<") return boolean(a < b);
+    if (op == ">") return boolean(a > b);
+    if (op == "<=" || op == "≤") return boolean(a <= b);
+    if (op == ">=" || op == "≥") return boolean(a >= b);
 
     math::Result result;
+    if (op == "+") result = math::add(a, b);
+    else if (op == "-") result = math::subtract(a, b);
+    else if (op == "*" || op == "×") result = math::multiply(a, b);
+    else if (op == "/" || op == "÷") result = math::divide(a, b);
+    else if (op == "%") result = math::modulo(a, b);
+    else return error("Unsupported binary operator: " + op);
 
-    switch (expression.op) {
-    case TokenType::Plus:
-        result = math::add(a, b);
-        break;
-
-    case TokenType::Minus:
-        result = math::subtract(a, b);
-        break;
-
-    case TokenType::Multiply:
-        result = math::multiply(a, b);
-        break;
-
-    case TokenType::Divide:
-        result = math::divide(a, b);
-        break;
-
-    case TokenType::Modulo:
-        result = math::modulo(a, b);
-        break;
-
-    case TokenType::Equal:
-        return boolean(a == b);
-
-    case TokenType::NotEqual:
-        return boolean(a != b);
-
-    case TokenType::Less:
-        return boolean(a < b);
-
-    case TokenType::Greater:
-        return boolean(a > b);
-
-    case TokenType::LessEqual:
-        return boolean(a <= b);
-
-    case TokenType::GreaterEqual:
-        return boolean(a >= b);
-
-    default:
-        return error("Unsupported binary operator.");
-    }
-
-    if (!result.valid) {
-        return error(result.error);
-    }
-
+    if (!result.valid) return error(result.error);
     return number(result.value);
 }
 
@@ -195,7 +139,7 @@ RuntimeResult Runtime::evaluate_call(
 ) const {
     return error(
         "Function '" +
-        expression.function +
+        expression.callee +
         "' is not implemented yet."
     );
 }
