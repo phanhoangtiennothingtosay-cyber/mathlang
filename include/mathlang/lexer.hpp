@@ -19,6 +19,7 @@ enum class TokenType {
     Factorial,
 
     Equal,
+    EqualEqual,
     NotEqual,
     Less,
     Greater,
