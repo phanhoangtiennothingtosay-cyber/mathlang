@@ -19,3 +19,11 @@ add_executable(mathlang
 )
 
 target_include_directories(mathlang PRIVATE include)
+
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+    target_compile_options(mathlang PRIVATE
+        -Wall
+        -Wextra
+        -Wpedantic
+    )
+endif()
