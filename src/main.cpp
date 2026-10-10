@@ -1,111 +1,124 @@
-#include "mathlang/lexer.hpp"
-#include "mathlang/parser.hpp"
-#include "mathlang/runtime.hpp"
-#include "mathlang/semantic.hpp"
-#include "mathlang/variables.hpp"
+#include "mathlang/math.hpp"
 
-#include <fstream>
-#include <iostream>
-#include <iterator>
-#include <string>
+#include <cmath>
+#include <limits>
 
-int main(int argc, char* argv[]) {
-    if (argc < 2) {
-        std::cerr << "Usage: mathlang <file.mth>\n";
-        return 1;
-    }
+namespace mathlang::math {
 
-    const std::string path = argv[1];
+namespace {
 
-    if (
-        path.size() < 4 ||
-        path.substr(path.size() - 4) != ".mth"
-    ) {
-        std::cerr << "Error: expected a .mth source file.\n";
-        return 1;
-    }
-
-    std::ifstream file(path, std::ios::binary);
-
-    if (!file) {
-        std::cerr << "Error: cannot read source file.\n";
-        return 1;
-    }
-
-    const std::string source{
-        std::istreambuf_iterator<char>(file),
-        std::istreambuf_iterator<char>()
+Result success(double value) {
+    return {
+        true,
+        value,
+        {}
     };
-
-    mathlang::Lexer lexer(source);
-    const auto tokens = lexer.tokenize();
-
-    for (const auto& token : tokens) {
-        if (token.type == mathlang::TokenType::Invalid) {
-            std::cerr
-                << "Syntax Error at position "
-                << token.position
-                << '\n';
-
-            return 1;
-        }
-    }
-
-    try {
-        mathlang::Parser parser(tokens);
-        auto expression = parser.parse();
-
-        mathlang::Variables variables;
-
-        mathlang::SemanticAnalyzer semantic;
-
-        const auto semantic_result =
-            semantic.analyze(*expression);
-
-        if (!semantic_result.valid) {
-            std::cerr
-                << "Semantic Error: "
-                << semantic_result.error
-                << '\n';
-
-            return 1;
-        }
-
-        mathlang::Runtime runtime;
-
-        const auto result =
-            runtime.evaluate(*expression);
-
-        if (!result.valid) {
-            std::cerr
-                << "Runtime Error: "
-                << result.error
-                << '\n';
-
-            return 1;
-        }
-
-        switch (result.value.type) {
-        case mathlang::RuntimeValue::Type::Number:
-            std::cout << result.value.number << '\n';
-            break;
-
-        case mathlang::RuntimeValue::Type::Boolean:
-            std::cout
-                << (result.value.boolean ? "true" : "false")
-                << '\n';
-            break;
-
-        case mathlang::RuntimeValue::Type::Undefined:
-            std::cerr
-                << "Runtime Error: undefined value.\n";
-            return 1;
-        }
-
-    } catch (const std::exception& error) {
-        std::cerr << error.what() << '\n';
-        return 1;
-    }
-
-    return 0;
 }
+
+Result failure(const char* message) {
+    return {
+        false,
+        0.0,
+        message
+    };
+}
+
+} // namespace
+
+Result add(double a, double b) {
+    const double value = a + b;
+    if (!std::isfinite(value)) return failure("Addition result is not finite.");
+    return success(value);
+}
+
+Result subtract(double a, double b) {
+    const double value = a - b;
+    if (!std::isfinite(value)) return failure("Subtraction result is not finite.");
+    return success(value);
+}
+
+Result multiply(double a, double b) {
+    const double value = a * b;
+    if (!std::isfinite(value)) return failure("Multiplication result is not finite.");
+    return success(value);
+}
+
+Result divide(double a, double b) {
+    if (b == 0.0) {
+        return failure("Division by zero is undefined.");
+    }
+
+    const double value = a / b;
+    if (!std::isfinite(value)) return failure("Division result is not finite.");
+    return success(value);
+}
+
+Result modulo(double a, double b) {
+    if (b == 0.0) {
+        return failure("Modulo by zero is undefined.");
+    }
+
+    const double value = std::fmod(a, b);
+    if (!std::isfinite(value)) return failure("Modulo result is not finite.");
+    return success(value);
+}
+
+Result factorial(double x) {
+    if (!std::isfinite(x)) {
+        return failure(
+            "Factorial requires a finite number."
+        );
+    }
+
+    if (x < 0.0) {
+        return failure(
+            "Factorial is undefined for negative integers."
+        );
+    }
+
+    if (std::floor(x) != x) {
+        return failure(
+            "Factorial requires a non-negative integer."
+        );
+    }
+
+    if (x > 170.0) {
+        return failure(
+            "Factorial result exceeds double range."
+        );
+    }
+
+    double result = 1.0;
+
+    for (double i = 2.0; i <= x; i += 1.0) {
+        result *= i;
+    }
+
+    return success(result);
+}
+
+Result equal(double a, double b) {
+    return success(a == b ? 1.0 : 0.0);
+}
+
+Result not_equal(double a, double b) {
+    return success(a != b ? 1.0 : 0.0);
+}
+
+Result less(double a, double b) {
+    return success(a < b ? 1.0 : 0.0);
+}
+
+Result greater(double a, double b) {
+    return success(a > b ? 1.0 : 0.0);
+}
+
+Result less_equal(double a, double b) {
+    return success(a <= b ? 1.0 : 0.0);
+}
+
+Result greater_equal(double a, double b) {
+    return success(a >= b ? 1.0 : 0.0);
+}
+
+} // namespace mathlang::math
