@@ -2,112 +2,266 @@
 
 #include <algorithm>
 #include <cctype>
+#include <iterator>
 #include <string>
 #include <utility>
 
 namespace mathlang {
 namespace {
+
 std::string lower(std::string value) {
-    for (char& c : value) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    for (char& c : value) {
+        c = static_cast<char>(
+            std::tolower(static_cast<unsigned char>(c)));
+    }
     return value;
 }
 
-bool is_function_known(const std::string& n) {
+bool is_zero_argument_function(const std::string& name) {
+    return name == "pi" ||
+           name == "e" ||
+           name == "tau" ||
+           name == "goldenratio" ||
+           name == "golden_ratio";
+}
+
+bool is_function_known(const std::string& name) {
     static const char* const names[] = {
-        "abs", "sqrt", "cbrt", "exp", "ln", "log", "log10", "log2",
-        "sin", "cos", "tan", "asin", "acos", "atan", "sinh", "cosh", "tanh",
-        "asinh", "acosh", "atanh", "floor", "ceil", "ceiling", "round", "trunc",
-        "sign", "min", "max", "pow", "hypot", "atan2", "clamp", "deg", "rad",
+        // Zero-argument constants.
+        "pi", "e", "tau", "goldenratio", "golden_ratio",
+
+        // Basic and advanced math.
+        "abs", "sqrt", "cbrt", "exp",
+        "ln", "log", "log10", "log2",
+
+        // Trigonometry: radians.
+        "sin", "cos", "tan",
+        "asin", "acos", "atan", "atan2",
+
+        // Trigonometry: degrees.
+        "sind", "cosd", "tand",
+        "sin_deg", "cos_deg", "tan_deg",
+        "asind", "acosd", "atand",
+        "asin_deg", "acos_deg", "atan_deg",
+
+        // Hyperbolic functions.
+        "sinh", "cosh", "tanh",
+        "asinh", "acosh", "atanh",
+
+        // Rounding and sign.
+        "floor", "ceil", "ceiling", "round", "trunc", "sign",
+
+        // Multiple-argument functions.
+        "min", "max", "pow", "hypot", "clamp",
+
+        // Angle conversion.
+        "deg", "rad",
+
+        // Factorial.
         "fact", "factorial"
     };
-    return std::any_of(std::begin(names), std::end(names), [&](const char* item) { return n == item; });
+
+    return std::any_of(
+        std::begin(names),
+        std::end(names),
+        [&](const char* item) {
+            return name == item;
+        });
 }
 
-bool valid_arity(const std::string& n, std::size_t count) {
-    if (n == "min" || n == "max" || n == "pow" || n == "hypot" || n == "atan2") return count == 2;
-    if (n == "clamp") return count == 3;
-    if (n == "log") return count == 1 || count == 2;
+bool valid_arity(const std::string& name, std::size_t count) {
+    if (is_zero_argument_function(name)) {
+        return count == 0;
+    }
+
+    if (name == "min" || name == "max" ||
+        name == "pow" || name == "hypot" ||
+        name == "atan2") {
+        return count == 2;
+    }
+
+    if (name == "clamp") {
+        return count == 3;
+    }
+
+    if (name == "log") {
+        return count == 1 || count == 2;
+    }
+
     return count == 1;
 }
+
 } // namespace
 
-SemanticResult SemanticAnalyzer::analyze(const Expression& expression) const {
+SemanticResult SemanticAnalyzer::analyze(
+    const Expression& expression) const {
     return analyze_expression(expression);
 }
 
-SemanticResult SemanticAnalyzer::analyze_expression(const Expression& expression) const {
-    if (const auto* node = dynamic_cast<const NumberExpression*>(&expression)) return analyze_number(*node);
-    if (const auto* node = dynamic_cast<const IdentifierExpression*>(&expression)) return analyze_identifier(*node);
-    if (const auto* node = dynamic_cast<const UnaryExpression*>(&expression)) return analyze_unary(*node);
-    if (const auto* node = dynamic_cast<const BinaryExpression*>(&expression)) return analyze_binary(*node);
-    if (const auto* node = dynamic_cast<const CallExpression*>(&expression)) return analyze_call(*node);
-    if (const auto* node = dynamic_cast<const FactorialExpression*>(&expression)) return analyze_factorial(*node);
+SemanticResult SemanticAnalyzer::analyze_expression(
+    const Expression& expression) const {
+    if (const auto* node =
+            dynamic_cast<const NumberExpression*>(&expression)) {
+        return analyze_number(*node);
+    }
+
+    if (const auto* node =
+            dynamic_cast<const IdentifierExpression*>(&expression)) {
+        return analyze_identifier(*node);
+    }
+
+    if (const auto* node =
+            dynamic_cast<const UnaryExpression*>(&expression)) {
+        return analyze_unary(*node);
+    }
+
+    if (const auto* node =
+            dynamic_cast<const BinaryExpression*>(&expression)) {
+        return analyze_binary(*node);
+    }
+
+    if (const auto* node =
+            dynamic_cast<const CallExpression*>(&expression)) {
+        return analyze_call(*node);
+    }
+
+    if (const auto* node =
+            dynamic_cast<const FactorialExpression*>(&expression)) {
+        return analyze_factorial(*node);
+    }
+
     return error("Unknown expression.");
 }
 
-SemanticResult SemanticAnalyzer::analyze_number(const NumberExpression&) const {
+SemanticResult SemanticAnalyzer::analyze_number(
+    const NumberExpression&) const {
     return valid(ValueType::Number);
 }
 
-SemanticResult SemanticAnalyzer::analyze_identifier(const IdentifierExpression&) const {
-    // Unknown names are left for runtime resolution (constants or future variables).
+SemanticResult SemanticAnalyzer::analyze_identifier(
+    const IdentifierExpression&) const {
+    // The runtime resolves constants and variables.
     return valid(ValueType::Unknown);
 }
 
-SemanticResult SemanticAnalyzer::analyze_unary(const UnaryExpression& expression) const {
+SemanticResult SemanticAnalyzer::analyze_unary(
+    const UnaryExpression& expression) const {
     const auto operand = analyze_expression(*expression.operand);
-    if (!operand.valid) return operand;
-    if (operand.type != ValueType::Number && operand.type != ValueType::Unknown)
+
+    if (!operand.valid) {
+        return operand;
+    }
+
+    if (operand.type != ValueType::Number &&
+        operand.type != ValueType::Unknown) {
         return error("Unary operator requires a numeric expression.");
+    }
+
     return valid(ValueType::Number);
 }
 
-SemanticResult SemanticAnalyzer::analyze_binary(const BinaryExpression& expression) const {
+SemanticResult SemanticAnalyzer::analyze_binary(
+    const BinaryExpression& expression) const {
     const auto left = analyze_expression(*expression.left);
-    if (!left.valid) return left;
+    if (!left.valid) {
+        return left;
+    }
+
     const auto right = analyze_expression(*expression.right);
-    if (!right.valid) return right;
+    if (!right.valid) {
+        return right;
+    }
 
     const std::string& op = expression.op;
-    const bool comparison = op == "=" || op == "==" || op == "!=" || op == "≠" ||
-        op == "<" || op == ">" || op == "<=" || op == ">=" || op == "≤" || op == "≥";
+
+    const bool comparison =
+        op == "=" || op == "==" ||
+        op == "!=" || op == "≠" ||
+        op == "<" || op == ">" ||
+        op == "<=" || op == ">=" ||
+        op == "≤" || op == "≥";
+
     if (comparison) {
-        if ((left.type != ValueType::Number && left.type != ValueType::Unknown) ||
-            (right.type != ValueType::Number && right.type != ValueType::Unknown))
-            return error("Comparison operators require numeric operands.");
+        if ((left.type != ValueType::Number &&
+             left.type != ValueType::Unknown) ||
+            (right.type != ValueType::Number &&
+             right.type != ValueType::Unknown)) {
+            return error(
+                "Comparison operators require numeric operands.");
+        }
+
         return valid(ValueType::Boolean);
     }
 
-    const bool arithmetic = op == "+" || op == "-" || op == "*" || op == "×" ||
-        op == "/" || op == "÷" || op == "%" || op == "^";
-    if (!arithmetic) return error("Unsupported binary operator: " + op);
-    if (left.type != ValueType::Number && left.type != ValueType::Unknown)
+    const bool arithmetic =
+        op == "+" || op == "-" ||
+        op == "*" || op == "×" ||
+        op == "/" || op == "÷" ||
+        op == "%" || op == "^";
+
+    if (!arithmetic) {
+        return error("Unsupported binary operator: " + op);
+    }
+
+    if (left.type != ValueType::Number &&
+        left.type != ValueType::Unknown) {
         return error("Left operand must be numeric.");
-    if (right.type != ValueType::Number && right.type != ValueType::Unknown)
+    }
+
+    if (right.type != ValueType::Number &&
+        right.type != ValueType::Unknown) {
         return error("Right operand must be numeric.");
+    }
+
     return valid(ValueType::Number);
 }
 
-SemanticResult SemanticAnalyzer::analyze_call(const CallExpression& expression) const {
+SemanticResult SemanticAnalyzer::analyze_call(
+    const CallExpression& expression) const {
     const std::string name = lower(expression.callee);
-    if (name.empty()) return error("Function name cannot be empty.");
-    if (!is_function_known(name)) return error("Unknown math function: " + expression.callee + ".");
-    if (!valid_arity(name, expression.arguments.size()))
-        return error("Function '" + name + "' received the wrong number of arguments.");
+
+    if (name.empty()) {
+        return error("Function name cannot be empty.");
+    }
+
+    if (!is_function_known(name)) {
+        return error("Unknown math function: " + expression.callee + ".");
+    }
+
+    if (!valid_arity(name, expression.arguments.size())) {
+        return error(
+            "Function '" + name +
+            "' received the wrong number of arguments.");
+    }
+
     for (const auto& argument : expression.arguments) {
         const auto result = analyze_expression(*argument);
-        if (!result.valid) return result;
-        if (result.type == ValueType::Boolean)
+
+        if (!result.valid) {
+            return result;
+        }
+
+        if (result.type == ValueType::Boolean) {
             return error("Math functions require numeric arguments.");
+        }
     }
+
     return valid(ValueType::Number);
 }
 
-SemanticResult SemanticAnalyzer::analyze_factorial(const FactorialExpression& expression) const {
+SemanticResult SemanticAnalyzer::analyze_factorial(
+    const FactorialExpression& expression) const {
     const auto operand = analyze_expression(*expression.operand);
-    if (!operand.valid) return operand;
-    if (operand.type != ValueType::Number && operand.type != ValueType::Unknown)
+
+    if (!operand.valid) {
+        return operand;
+    }
+
+    if (operand.type != ValueType::Number &&
+        operand.type != ValueType::Unknown) {
         return error("Factorial requires a numeric expression.");
+    }
+
     return valid(ValueType::Number);
 }
 
