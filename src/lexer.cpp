@@ -22,6 +22,81 @@ void Lexer::advance() {
 void Lexer::skip_whitespace() {
     while (std::isspace(static_cast<unsigned char>(current()))) advance();
 }
+bool Lexer::skip_comment(std::vector<Token>& tokens) {
+    const auto starts_with = [this](std::string_view marker) {
+        return source_.substr(position_, marker.size()) == marker;
+    };
+
+    const auto skip_line = [this]() {
+        while (position_ < source_.size() && current() != '\n') {
+            advance();
+        }
+    };
+
+    const auto skip_block =
+        [this, &tokens](std::string_view opener,
+                        std::string_view closer) {
+            const std::size_t start = position_;
+
+            position_ += opener.size();
+
+            const std::size_t end = source_.find(closer, position_);
+
+            if (end == std::string_view::npos) {
+                tokens.push_back({
+                    TokenType::Invalid,
+                    "unterminated block comment",
+                    start
+                });
+
+                position_ = source_.size();
+                return;
+            }
+
+            position_ = end + closer.size();
+        };
+
+    // Lua long comment: --[[ ... ]]
+    // Must be checked before the ordinary -- line comment.
+    if (starts_with("--[[")) {
+        skip_block("--[[", "]]");
+        return true;
+    }
+
+    // Single-line comments: Python, C-style, SQL, Lua, and others.
+    if (current() == '#' ||
+        starts_with("//") ||
+        starts_with("--")) {
+        skip_line();
+        return true;
+    }
+
+    // C / C++ / Java / JavaScript block comment.
+    if (starts_with("/*")) {
+        skip_block("/*", "*/");
+        return true;
+    }
+
+    // Haskell block comment.
+    if (starts_with("{-")) {
+        skip_block("{-", "-}");
+        return true;
+    }
+
+    // ML / OCaml / Pascal-style block comment.
+    if (starts_with("(*")) {
+        skip_block("(*", "*)");
+        return true;
+    }
+
+    // HTML-style comment.
+    if (starts_with("<!--")) {
+        skip_block("<!--", "-->");
+        return true;
+    }
+
+    return false;
+}
 
 Token Lexer::make_token(TokenType type, std::size_t start, std::size_t end) {
     return {type, std::string(source_.substr(start, end - start)), start};
