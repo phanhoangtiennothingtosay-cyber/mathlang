@@ -142,7 +142,9 @@ std::vector<Token> Lexer::tokenize() {
     while (position_ < source_.size()) {
         skip_whitespace();
         if (position_ >= source_.size()) break;
-
+        if (skip_comment(tokens)) {
+        continue;
+    }
         const std::size_t start = position_;
         const char c = current();
         if (std::isdigit(static_cast<unsigned char>(c)) ||
